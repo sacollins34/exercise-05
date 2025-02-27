@@ -1,0 +1,225 @@
+---
+title: "Exercise-05-Quarto-Challange-1"
+format: html
+editor: visual
+---
+
+# Exercise 05: **Generate Sampling Distributions and CIs**
+
+## Challenge 1
+
+### Step 1
+
+Loading in the packages and the "*IMDB-movies.csv*" file that I will be using for **Challange 1.** I named the file **md** instead of d.
+
+```{r}
+#| output: FALSE
+
+library(tidyverse)
+library(mosaic)
+library(radiant)
+mf <- "https://raw.githubusercontent.com/difiore/ada-datasets/main/IMDB-movies.csv"
+md <- read_csv(mf, col_names = TRUE)
+```
+
+### Step 2
+
+I created a one-line statement to do some data wrangling while using the pipe operator:
+
+-   Filtering out data that includes movies from 1920 to 1979.
+
+-   Filtering out data that includes movies that are between 1 and 3 hours long.
+
+-   Creating a new column that codes the startYear into a new variable **"decade"**
+
+```{r}
+
+md2 <- md |>
+  filter(startYear >= 1920 & startYear <= 1979) |>
+  filter(runtimeMinutes >= 60 & runtimeMinutes <= 180) |> 
+  mutate(decade = case_when(startYear >= 1920 & startYear <= 1929 ~ "20s",
+                            startYear >= 1930 & startYear <= 1939 ~ "30s",
+                            startYear >= 1940 & startYear <= 1949 ~ "40s",
+                            startYear >= 1950 & startYear <= 1959 ~ "50s",
+                            startYear >= 1960 & startYear <= 1969 ~ "60s",
+                            startYear >= 1970 & startYear <= 1979 ~ "70s"))
+md2
+```
+
+### Step 3
+
+Using {ggplot} I plotted histograms of the distribution of **"runtimeMinutes"** for each **"decade."** I was not sure what our y-axis should be so I left it as counts/frequency (vs density).
+
+```{r}
+#| warning: FALSE 
+
+md2_p <- ggplot(md2, aes(x = runtimeMinutes)) + 
+  geom_histogram(color="black", fill="orange") +
+  facet_wrap(~decade, ncol = 3) +
+  labs(x = "Runtime (Minutes)", y = "Counts", title = "Distribution of Runtime by Decades")
+
+md2_p
+```
+
+### Step 4
+
+I created a one-line statement to calculate the:
+
+-   population mean
+
+-   population standard deviation (SD)
+
+This was done for **"runtimeMinutes"** for each **"decade"** and then was saved in a new dataframe called **population_results.** I used the function **sdpop()** function from the ***{radiant}*** package to calculate the standard deviation (SD) for the population.
+
+```{r}
+
+population_results <- md2 |> 
+  group_by(decade) |>
+  summarize(meanRTMpopulation = mean(runtimeMinutes, na.rm = TRUE), 
+            sdRTMpopulation = sdpop(runtimeMinutes, na.rm = TRUE))
+population_results
+```
+
+### Step 5
+
+I single sampled 100 movies without replacement from the original data set and for each decade using the **slice_sample()** function. I then calculated the:
+
+-   single sample mean
+
+-   single sample standard deviation
+
+This was done for the **"runtimeMinutes"** for each **"decade."** I also created a new dataframe called **mdsample.** Values for the mean and standard deviation are always changing every time you run the code since it's taking a new sample. So, I ended up splitting the mode into two chunks so I can work with the same numbers. I couldn't set the **set.seed() function** to work.
+
+```{r}
+
+md_sample <- md2 |> 
+  group_by(decade) |>
+  slice_sample(n = 100, replace = FALSE)
+md_sample
+  
+md_sampleMSD <- md_sample |> 
+  group_by(decade) |>
+  summarize(meanRTMsample = mean(runtimeMinutes, na.rm = TRUE), 
+            sdRTMsample = sd(runtimeMinutes, na.rm = TRUE))
+md_sampleMSD
+```
+
+### Step 6
+
+I calculated the estimated standard error (SE) for the single sample of **"runtimeMinutes"** I took above in Step 5. This was based on the standard deviation and the sample size (n=100).
+
+```{r}
+
+md_sampleSEM <- md_sample |>
+  group_by(decade) |>
+  summarize(semRTMsample = sd(runtimeMinutes, na.rm = TRUE) / sqrt(length(runtimeMinutes)))
+
+md_sampleSEM
+
+```
+
+### **Step 7**
+
+I first calculated the standard error (SE) for the entire population.
+
+```{r}
+md_populationSEM <- md2 |>
+  group_by(decade) |> 
+  summarize(semRTMpopulation = sd(runtimeMinutes, na.rm = TRUE)/sqrt(length(runtimeMinutes)))
+
+md_populationSEM
+
+```
+
+I then created a new table using the **innerjoin()** function so we could compare the means, standard deviation (SD), and the standard error (SE) of the sample we took and the entire population.
+
+```{r}
+sample_population_comparison <- population_results |> 
+  inner_join(md_populationSEM, by = "decade") |>
+  inner_join(md_sampleMSD, by = "decade") |>
+  inner_join(md_sampleSEM, by = "decade")
+sample_population_comparison
+
+```
+
+### **Step 8**
+
+I attempted to create a *sampling distribution* of mean **"runtimeMinutes"** for each **"decade":**
+
+-   I drew 1000 random samples of 100 movies from each decade, without replacement
+
+-   Then for each sample I calculated the mean and standard deviation (SD) for **"runtimeMinutes"** for each decade.
+
+    ```{r}
+
+    random_sample <- 1000
+    sample_size <- 100
+    s <- list() #dummy variable to hold the samples
+
+    for (i in 1:random_sample) {
+       s[[i]] <- md2 |> #md2 original table with decades column
+         group_by(decade) |> 
+         slice_sample(n = sample_size, replace = FALSE) |> # used slice_sample for datatables 
+         group_by(decade) |>
+         summarize(meanRTMsampledis = mean(runtimeMinutes, na.rm = TRUE), 
+                   sdRTMsampledis = sd(runtimeMinutes, na.rm = TRUE))
+    }
+
+    combined_sample_distribution  <- bind_rows(s) #combined everything into one datatable
+    combined_sample_distribution  
+    ```
+
+### **Step 9**
+
+I then calculated the mean and and the standard deviation (SD) of the sampling distribution of the sample means for each **"decade."**
+
+-   mean: should be a good estimate of the population mean
+
+-   standard deviation (SD): estimate of the standard error of the population
+
+    ```{r}
+    sample_distributionMSD <- combined_sample_distribution|> # using the combined table above
+      group_by(decade) |> 
+      summarize(meanRTMcombinedsampledis = mean(meanRTMsampledis, na.rm = TRUE), 
+                sdRTMcombinedsampledis = sd(meanRTMsampledis, na.rm = TRUE))
+    sample_distributionMSD
+    ```
+
+I then plotted a histogram of the sampling distribution for each **"decade."** Now each **"decade"** has normal distribution bell shape.
+
+```{r}
+#| warning: FALSE 
+
+combined_sample_distribution_p <- 
+  ggplot(combined_sample_distribution, aes(x = meanRTMsampledis)) + 
+  geom_histogram(color="black", fill="purple") +
+  facet_wrap(~decade, ncol = 3) +
+  labs(x = "Runtime (Minutes)", y = "Counts", title = " Sampling Distribution of Runtime by Decades")
+
+combined_sample_distribution_p
+```
+
+### **Step 10**
+
+I compared the standard errors (SE) **"runtimeMinutes"** for each **"decade"** for:
+
+-   SE for the first sample of 100 movies
+
+-   SE for the known population
+
+-   SE for the sampling distribution of sample means
+
+```{r}
+
+#this first part is just creating the SE for the sampling distribution
+sample_distributionSEM <- combined_sample_distribution|>
+  group_by(decade) |> 
+  summarize(sdRTMcombinedsampledis = sd(meanRTMsampledis, na.rm = TRUE))
+
+
+standard_error_comparison <- md_sampleSEM |>
+  inner_join(md_populationSEM, by = "decade") |>
+  inner_join(sample_distributionSEM, by = "decade")
+
+standard_error_comparison
+```
